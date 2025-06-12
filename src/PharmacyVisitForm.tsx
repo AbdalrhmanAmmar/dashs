@@ -1,7 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { CalendarIcon, Store, Package, Receipt, Upload, DollarSign } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
-import PharmacyReceipt from './components/PharmacyReceipt';
 
 const pharmacies = [
   'صيدلية الشفاء',
@@ -53,6 +52,9 @@ interface VisitFormData {
   amount?: number;
   collectionStatus?: 'pending' | 'approved' | 'rejected';
   collectionProducts: CollectionProduct[];
+  orderProducts: CollectionProduct[];
+  introductoryNotes?: string;
+  introductoryImage?: File | null;
 }
 
 export default function PharmacyVisitForm() {
@@ -72,7 +74,15 @@ export default function PharmacyVisitForm() {
       quantity: 0,
       price: m.price,
       selected: false
-    }))
+    })),
+    orderProducts: medicines.map(m => ({
+      medicine: m.name,
+      quantity: 0,
+      price: m.price,
+      selected: false
+    })),
+    introductoryNotes: '',
+    introductoryImage: null
   });
 
   const receiptRef = useRef<HTMLDivElement>(null);
@@ -81,7 +91,7 @@ export default function PharmacyVisitForm() {
     content: () => receiptRef.current,
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     
     if (type === 'file' && e.target instanceof HTMLInputElement && e.target.files) {
@@ -106,8 +116,15 @@ export default function PharmacyVisitForm() {
     }
   };
 
-  const handleCollectionProductChange = (index: number, field: 'selected' | 'quantity', value: boolean | number) => {
-    const newProducts = [...formData.collectionProducts];
+  const handleProductChange = (
+    index: number, 
+    field: 'selected' | 'quantity', 
+    value: boolean | number,
+    productType: 'collection' | 'order'
+  ) => {
+    const productField = `${productType}Products` as const;
+    const newProducts = [...formData[productField]];
+    
     newProducts[index] = {
       ...newProducts[index],
       [field]: value
@@ -122,8 +139,8 @@ export default function PharmacyVisitForm() {
 
     setFormData(prev => ({
       ...prev,
-      collectionProducts: newProducts,
-      amount: totalAmount
+      [productField]: newProducts,
+      ...(productType === 'collection' ? { amount: totalAmount } : {})
     }));
   };
 
@@ -131,9 +148,18 @@ export default function PharmacyVisitForm() {
     e.preventDefault();
     
     const collections = JSON.parse(localStorage.getItem('collections') || '[]');
+    const orders = JSON.parse(localStorage.getItem('orders') || '[]');
     
     if (formData.collection === 'نعم') {
-      const selectedProducts = formData.collectionProducts.filter(p => p.selected && p.quantity > 0);
+      const selectedProducts = formData.collectionProducts
+        .filter(p => p.selected && p.quantity > 0)
+        .map(p => ({
+          medicine: p.medicine,
+          quantity: p.quantity,
+          price: p.price,
+          totalPrice: p.price * p.quantity
+        }));
+      
       collections.push({
         id: Date.now(),
         date: formData.visitDate,
@@ -147,18 +173,28 @@ export default function PharmacyVisitForm() {
     }
 
     if (formData.order === 'نعم') {
-      // إضافة طلبية بدون تفاصيل أدوية محددة
-      collections.push({
-        id: Date.now() + 1,
+      const selectedOrderProducts = formData.orderProducts
+        .filter(p => p.selected && p.quantity > 0)
+        .map(p => ({
+          medicine: p.medicine,
+          quantity: p.quantity,
+          price: p.price,
+          totalPrice: p.price * p.quantity
+        }));
+
+      orders.push({
+        id: Date.now(),
         date: formData.visitDate,
         pharmacy: formData.pharmacyName,
         type: 'order',
         status: 'pending',
-        groupId: `${formData.pharmacyName}-${formData.visitDate}`
+        groupId: `${formData.pharmacyName}-${formData.visitDate}`,
+        products: selectedOrderProducts
       });
     }
 
     localStorage.setItem('collections', JSON.stringify(collections));
+    localStorage.setItem('orders', JSON.stringify(orders));
     
     alert('تم تسجيل الزيارة بنجاح!');
 
@@ -182,7 +218,15 @@ export default function PharmacyVisitForm() {
         quantity: 0,
         price: m.price,
         selected: false
-      }))
+      })),
+      orderProducts: medicines.map(m => ({
+        medicine: m.name,
+        quantity: 0,
+        price: m.price,
+        selected: false
+      })),
+      introductoryNotes: '',
+      introductoryImage: null
     });
   };
 
@@ -343,8 +387,93 @@ export default function PharmacyVisitForm() {
               </div>
             </div>
 
-            {/* إظهار جدول التحصيل عند اختيار طلبية = نعم */}
+            {/* إظهار حقول الزيارة التعريفية عند اختيار نعم */}
+            {formData.introductoryVisit === 'نعم' && (
+              <div className="space-y-4 border-t pt-4">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">بيانات الزيارة التعريفية</h3>
+                
+                <div className="relative">
+                  <label className="flex items-center text-gray-700 mb-2">
+                    ملاحظات الزيارة
+                  </label>
+                  <textarea
+                    name="introductoryNotes"
+                    value={formData.introductoryNotes}
+                    onChange={handleChange}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="أدخل ملاحظات الزيارة التعريفية"
+                    rows={3}
+                  />
+                </div>
+
+                <div className="relative">
+                  <label className="flex items-center text-gray-700 mb-2">
+                    <Upload className="w-5 h-5 ml-2" />
+                    صورة الزيارة
+                  </label>
+                  <input
+                    type="file"
+                    name="introductoryImage"
+                    onChange={handleChange}
+                    accept="image/*"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <p className="text-sm text-gray-500 mt-1">يرجى رفع صورة توثق الزيارة التعريفية</p>
+                </div>
+              </div>
+            )}
+
+            {/* إظهار جدول الطلبية عند اختيار طلبية = نعم */}
             {formData.order === 'نعم' && (
+              <div className="space-y-4 border-t pt-4">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">منتجات الطلبية</h3>
+                <div className="overflow-hidden rounded-lg border border-gray-200">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">اختيار</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">الدواء</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">السعر</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">الكمية</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">المجموع</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {formData.orderProducts.map((product, index) => (
+                        <tr key={product.medicine}>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <input
+                              type="checkbox"
+                              checked={product.selected}
+                              onChange={(e) => handleProductChange(index, 'selected', e.target.checked, 'order')}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                            />
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">{product.medicine}</td>
+                          <td className="px-4 py-3 whitespace-nowrap">{product.price} ريال</td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <input
+                              type="number"
+                              min="0"
+                              value={product.quantity}
+                              onChange={(e) => handleProductChange(index, 'quantity', parseInt(e.target.value), 'order')}
+                              className="w-20 p-1 border border-gray-300 rounded"
+                              disabled={!product.selected}
+                            />
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {product.selected ? product.price * product.quantity : 0} ريال
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* إظهار جدول التحصيل عند اختيار تحصيل = نعم */}
+            {formData.collection === 'نعم' && (
               <div className="space-y-4 border-t pt-4">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">منتجات التحصيل</h3>
                 <div className="overflow-hidden rounded-lg border border-gray-200">
@@ -365,7 +494,7 @@ export default function PharmacyVisitForm() {
                             <input
                               type="checkbox"
                               checked={product.selected}
-                              onChange={(e) => handleCollectionProductChange(index, 'selected', e.target.checked)}
+                              onChange={(e) => handleProductChange(index, 'selected', e.target.checked, 'collection')}
                               className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                             />
                           </td>
@@ -376,7 +505,7 @@ export default function PharmacyVisitForm() {
                               type="number"
                               min="0"
                               value={product.quantity}
-                              onChange={(e) => handleCollectionProductChange(index, 'quantity', parseInt(e.target.value))}
+                              onChange={(e) => handleProductChange(index, 'quantity', parseInt(e.target.value), 'collection')}
                               className="w-20 p-1 border border-gray-300 rounded"
                               disabled={!product.selected}
                             />
@@ -394,44 +523,42 @@ export default function PharmacyVisitForm() {
                   <DollarSign className="w-6 h-6" />
                   <span>المجموع الكلي: {formData.amount} ريال</span>
                 </div>
-              </div>
-            )}
 
-            {/* إظهار حقول التحصيل عند اختيار تحصيل = نعم */}
-            {formData.collection === 'نعم' && (
-              <div className="space-y-4 border-t pt-4">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">بيانات التحصيل</h3>
-                
-                <div className="relative">
-                  <label className="flex items-center text-gray-700 mb-2">
-                    <Receipt className="w-5 h-5 ml-2" />
-                    رقم الوصل
-                  </label>
-                  <input
-                    type="text"
-                    name="receiptNumber"
-                    value={formData.receiptNumber}
-                    onChange={handleChange}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="أدخل رقم الوصل"
-                    required
-                  />
-                </div>
+                {/* حقول التحصيل */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">بيانات التحصيل</h3>
+                  
+                  <div className="relative">
+                    <label className="flex items-center text-gray-700 mb-2">
+                      <Receipt className="w-5 h-5 ml-2" />
+                      رقم الوصل
+                    </label>
+                    <input
+                      type="text"
+                      name="receiptNumber"
+                      value={formData.receiptNumber}
+                      onChange={handleChange}
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="أدخل رقم الوصل"
+                      required
+                    />
+                  </div>
 
-                <div className="relative">
-                  <label className="flex items-center text-gray-700 mb-2">
-                    <Upload className="w-5 h-5 ml-2" />
-                    صورة الوصل
-                  </label>
-                  <input
-                    type="file"
-                    name="receiptImage"
-                    onChange={handleChange}
-                    accept="image/*"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required
-                  />
-                  <p className="text-sm text-gray-500 mt-1">يرجى رفع صورة واضحة للوصل</p>
+                  <div className="relative">
+                    <label className="flex items-center text-gray-700 mb-2">
+                      <Upload className="w-5 h-5 ml-2" />
+                      صورة الوصل
+                    </label>
+                    <input
+                      type="file"
+                      name="receiptImage"
+                      onChange={handleChange}
+                      accept="image/*"
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    />
+                    <p className="text-sm text-gray-500 mt-1">يرجى رفع صورة واضحة للوصل</p>
+                  </div>
                 </div>
               </div>
             )}
@@ -454,10 +581,92 @@ export default function PharmacyVisitForm() {
               pharmacyName={formData.pharmacyName}
               date={formData.visitDate}
               amount={formData.amount || 0}
+              products={formData.collectionProducts
+                .filter(p => p.selected && p.quantity > 0)
+                .map(p => ({
+                  name: p.medicine,
+                  quantity: p.quantity,
+                  price: p.price,
+                  total: p.price * p.quantity
+                }))}
               representativeName="محمد أحمد"
               receiverName="أحمد محمد"
             />
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PharmacyReceipt({ 
+  pharmacyName, 
+  date, 
+  amount, 
+  products, 
+  representativeName, 
+  receiverName 
+}: {
+  pharmacyName: string;
+  date: string;
+  amount: number;
+  products: Array<{name: string, quantity: number, price: number, total: number}>;
+  representativeName: string;
+  receiverName: string;
+}) {
+  return (
+    <div className="p-6 max-w-md mx-auto bg-white rounded-lg shadow-md" dir="rtl">
+      <h2 className="text-xl font-bold text-center mb-4">إيصال تحصيل</h2>
+      <div className="space-y-4">
+        <div className="flex justify-between">
+          <span className="font-medium">الصيدلية:</span>
+          <span>{pharmacyName}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="font-medium">التاريخ:</span>
+          <span>{date}</span>
+        </div>
+        
+        <div className="border-t border-gray-200 my-4"></div>
+        
+        <h3 className="font-medium">تفاصيل المنتجات:</h3>
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-gray-200">
+              <th className="text-right py-2">المنتج</th>
+              <th className="text-center py-2">الكمية</th>
+              <th className="text-left py-2">المجموع</th>
+            </tr>
+          </thead>
+          <tbody>
+            {products.map((product, index) => (
+              <tr key={index} className="border-b border-gray-200">
+                <td className="py-2">{product.name}</td>
+                <td className="text-center py-2">{product.quantity}</td>
+                <td className="text-left py-2">{product.total} ريال</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        
+        <div className="border-t border-gray-200 my-4"></div>
+        
+        <div className="flex justify-between font-bold text-lg">
+          <span>المجموع الكلي:</span>
+          <span>{amount} ريال</span>
+        </div>
+        
+        <div className="border-t border-gray-200 my-4"></div>
+        
+        <div className="flex justify-between mt-8">
+          <div className="text-center">
+            <div className="font-medium mb-2">توقيع المندوب</div>
+            <div>{representativeName}</div>
+          </div>
+          <div className="text-center">
+            <div className="font-medium mb-2">توقيع المستلم</div>
+            <div>{receiverName}</div>
+          </div>
         </div>
       </div>
     </div>

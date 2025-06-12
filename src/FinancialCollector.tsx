@@ -1,7 +1,14 @@
 import React, { useState, useRef } from 'react';
-import { Check, X, Printer, ChevronDown, ChevronUp } from 'lucide-react';
+import { Check, X, Printer, ChevronDown, ChevronUp, Package, DollarSign } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
 import PharmacyReceipt from './components/PharmacyReceipt';
+
+interface Product {
+  medicine: string;
+  quantity: number;
+  price: number;
+  totalPrice: number;
+}
 
 interface Collection {
   id: number;
@@ -9,222 +16,317 @@ interface Collection {
   pharmacy: string;
   amount?: number;
   receiptNumber?: string;
-  medicine?: string;
-  quantity?: number;
-  products?: Array<{ medicine: string; quantity: number; price: number }>;
+  products?: Product[];
   type: 'collection' | 'order';
   status: 'pending' | 'approved' | 'rejected';
   groupId?: string;
 }
 
 const FinancialCollector: React.FC = () => {
+  // Safely parse and initialize collections with default values
   const [collections, setCollections] = useState<Collection[]>(() => {
-    const savedCollections = JSON.parse(localStorage.getItem('collections') || '[]');
-    return savedCollections.map((collection: Collection) => {
-      if (collection.type === 'order' && !collection.groupId) {
-        return {
-          ...collection,
-          groupId: `${collection.pharmacy}-${collection.date}`
-        };
-      }
-      return collection;
-    });
+    try {
+      const stored = localStorage.getItem('collections');
+      if (!stored) return [];
+      const parsed = JSON.parse(stored) as Collection[];
+      return parsed.map(item => ({
+        ...item,
+        amount: item.amount || 0,
+        products: item.products?.map(p => ({
+          ...p,
+          price: p.price || 0,
+          totalPrice: p.totalPrice || 0
+        })) || []
+      }));
+    } catch {
+      return [];
+    }
   });
+
+  // Safely parse and initialize orders with default values
+  const [orders, setOrders] = useState<Collection[]>(() => {
+    try {
+      const stored = localStorage.getItem('orders');
+      if (!stored) return [];
+      const parsed = JSON.parse(stored) as Collection[];
+      return parsed.map(item => ({
+        ...item,
+        amount: item.amount || 0,
+        products: item.products?.map(p => ({
+          ...p,
+          price: p.price || 0,
+          totalPrice: p.totalPrice || 0
+        })) || []
+      }));
+    } catch {
+      return [];
+    }
+  });
+
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const receiptRef = useRef<HTMLDivElement>(null);
 
-  const handlePrint = useReactToPrint({
-    content: () => receiptRef.current,
-  });
+  const handlePrint = useReactToPrint({ content: () => receiptRef.current });
 
-  const handleStatusChange = (id: number, newStatus: 'approved' | 'rejected') => {
-    const updatedCollections = collections.map(collection => {
-      if (collection.id === id) {
-        return { ...collection, status: newStatus };
-      }
-      return collection;
-    });
-    setCollections(updatedCollections);
-    localStorage.setItem('collections', JSON.stringify(updatedCollections));
+  const handleStatusChange = (
+    list: Collection[],
+    setList: (val: Collection[]) => void,
+    id: number,
+    newStatus: 'approved' | 'rejected',
+    key: string
+  ) => {
+    const updated = list.map(item => 
+      item.id === id ? { ...item, status: newStatus } : item
+    );
+    setList(updated);
+    localStorage.setItem(key, JSON.stringify(updated));
   };
 
   const handleGroupStatusChange = (groupId: string, newStatus: 'approved' | 'rejected') => {
-    const updatedCollections = collections.map(collection => {
-      if (collection.type === 'order' && collection.groupId === groupId) {
-        if (newStatus === 'approved') {
-          const orders = JSON.parse(localStorage.getItem('orders') || '[]');
-          orders.push({
-            id: Date.now(),
-            date: collection.date,
-            pharmacy: collection.pharmacy,
-            medicine: collection.medicine,
-            quantity: collection.quantity,
-            status: 'pending'
-          });
-          localStorage.setItem('orders', JSON.stringify(orders));
-        }
-        return { ...collection, status: newStatus };
-      }
-      return collection;
-    });
-    setCollections(updatedCollections);
-    localStorage.setItem('collections', JSON.stringify(updatedCollections));
+    const updated = orders.map(order => 
+      order.groupId === groupId ? { ...order, status: newStatus } : order
+    );
+    setOrders(updated);
+    localStorage.setItem('orders', JSON.stringify(updated));
   };
 
-  // Separate financial collections and orders
-  const financialCollections = collections.filter(c => c.type === 'collection');
-  
-  // Group orders by pharmacy and date
-  const groupedOrders = collections
-    .filter(c => c.type === 'order')
-    .reduce((acc, order) => {
-      const key = `${order.pharmacy}-${order.date}`;
-      if (!acc[key]) {
-        acc[key] = {
-          pharmacy: order.pharmacy,
-          date: order.date,
-          orders: [],
-          status: order.status
-        };
-      }
-      acc[key].orders.push(order);
-      return acc;
-    }, {} as Record<string, { pharmacy: string; date: string; orders: Collection[]; status: string }>);
+  const toggleGroupExpansion = (groupId: string) => {
+    const newExpanded = new Set(expandedGroups);
+    newExpanded.has(groupId) ? newExpanded.delete(groupId) : newExpanded.add(groupId);
+    setExpandedGroups(newExpanded);
+  };
+
+  const groupedOrders = orders.reduce((acc, order) => {
+    const key = order.groupId || `${order.pharmacy}-${order.date}`;
+    if (!acc[key]) {
+      acc[key] = {
+        groupId: key,
+        pharmacy: order.pharmacy,
+        date: order.date,
+        products: [],
+        status: order.status,
+        totalAmount: 0
+      };
+    }
+    if (order.products) {
+      acc[key].products.push(...order.products.map(p => ({
+        ...p,
+        price: p.price || 0,
+        totalPrice: p.totalPrice || 0
+      })));
+      acc[key].totalAmount += order.products.reduce((sum, p) => sum + (p.totalPrice || 0), 0);
+    }
+    return acc;
+  }, {} as Record<string, {
+    groupId: string;
+    pharmacy: string;
+    date: string;
+    products: Product[];
+    status: string;
+    totalAmount: number;
+  }>);
+
+  const safeToLocaleString = (value: number | undefined) => {
+    return (value || 0).toLocaleString();
+  };
 
   return (
     <div className="py-12 px-4 sm:px-6 lg:px-8" dir="rtl">
       <div className="max-w-7xl mx-auto">
         <h2 className="text-2xl font-bold text-gray-900 mb-8">المحصل المالي</h2>
 
-        {/* Financial Collections Section */}
+        {/* التحصيلات */}
         <div className="mb-12">
           <h3 className="text-xl font-semibold text-gray-800 mb-4">التحصيلات المالية</h3>
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">التاريخ</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المبلغ</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">رقم الإيصال</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الحالة</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الإجراءات</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {financialCollections.map((collection) => (
-                  <tr key={collection.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{collection.date}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{collection.amount} ريال</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{collection.receiptNumber}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        collection.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                        collection.status === 'approved' ? 'bg-green-100 text-green-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {collection.status === 'pending' ? 'قيد الانتظار' :
-                         collection.status === 'approved' ? 'تم الموافقة' :
-                         'تم الرفض'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex space-x-2">
-                        {collection.status === 'pending' && (
-                          <>
-                            <button
-                              onClick={() => handleStatusChange(collection.id, 'approved')}
-                              className="text-green-600 hover:text-green-900 ml-2"
-                            >
-                              <Check className="w-5 h-5" />
-                            </button>
-                            <button
-                              onClick={() => handleStatusChange(collection.id, 'rejected')}
-                              className="text-red-600 hover:text-red-900"
-                            >
-                              <X className="w-5 h-5" />
-                            </button>
-                          </>
-                        )}
-                        <button
-                          onClick={() => {
-                            setSelectedCollection(collection);
-                            setTimeout(handlePrint, 100);
-                          }}
-                          className="text-blue-600 hover:text-blue-900 mr-2"
-                        >
-                          <Printer className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </td>
+          {collections.length > 0 ? (
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-right">التاريخ</th>
+                    <th className="px-6 py-3 text-right">الصيدلية</th>
+                    <th className="px-6 py-3 text-right">المبلغ</th>
+                    <th className="px-6 py-3 text-right">رقم الإيصال</th>
+                    <th className="px-6 py-3 text-right">المنتجات</th>
+                    <th className="px-6 py-3 text-right">الحالة</th>
+                    <th className="px-6 py-3 text-right">الإجراءات</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {collections.map(collection => (
+                    <tr key={collection.id}>
+                      <td className="px-6 py-4 text-right">{collection.date}</td>
+                      <td className="px-6 py-4 text-right">{collection.pharmacy}</td>
+                      <td className="px-6 py-4 text-right">{safeToLocaleString(collection.amount)} ريال</td>
+                      <td className="px-6 py-4 text-right">{collection.receiptNumber || '--'}</td>
+                      <td className="px-6 py-4 text-right">
+                        {collection.products?.map((p, i) => (
+                          <div key={i} className="mb-1">
+                            <span className="font-medium">{p.medicine}</span> 
+                            <span className="text-gray-500 mx-1">×{p.quantity}</span> 
+                            <span>= {safeToLocaleString(p.totalPrice)} ريال</span>
+                          </div>
+                        ))}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                          collection.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          collection.status === 'approved' ? 'bg-green-100 text-green-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {collection.status === 'pending' ? 'قيد الانتظار' : 
+                           collection.status === 'approved' ? 'تم الموافقة' : 'تم الرفض'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex justify-end space-x-2">
+                          {collection.status === 'pending' && (
+                            <>
+                              <button 
+                                onClick={() => handleStatusChange(collections, setCollections, collection.id, 'approved', 'collections')} 
+                                className="p-1 text-green-600 hover:bg-green-50 rounded-full"
+                                title="موافقة"
+                              >
+                                <Check className="w-5 h-5" />
+                              </button>
+                              <button 
+                                onClick={() => handleStatusChange(collections, setCollections, collection.id, 'rejected', 'collections')} 
+                                className="p-1 text-red-600 hover:bg-red-50 rounded-full"
+                                title="رفض"
+                              >
+                                <X className="w-5 h-5" />
+                              </button>
+                            </>
+                          )}
+                          <button 
+                            onClick={() => { setSelectedCollection(collection); setTimeout(handlePrint, 100); }} 
+                            className="p-1 text-blue-600 hover:bg-blue-50 rounded-full"
+                            title="طباعة"
+                          >
+                            <Printer className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : <p className="text-center text-gray-500">لا توجد تحصيلات حالياً</p>}
         </div>
 
-        {/* Orders Section */}
-        <div>
-          <h3 className="text-xl font-semibold text-gray-800 mb-4">تحصيل الطلبيات</h3>
-          <div className="space-y-6">
-            {Object.entries(groupedOrders).map(([groupId, group]) => (
-              <div key={groupId} className="bg-white rounded-lg shadow overflow-hidden">
-                <div className="bg-gray-50 px-6 py-4 flex justify-between items-center">
-                  <div>
-                    <h4 className="text-lg font-medium text-gray-900">{group.pharmacy}</h4>
-                    <p className="text-sm text-gray-500">تاريخ الطلب: {group.date}</p>
-                  </div>
-                  <div className="flex items-center space-x-4">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      group.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                      group.status === 'approved' ? 'bg-green-100 text-green-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>
-                      {group.status === 'pending' ? 'قيد الانتظار' :
-                       group.status === 'approved' ? 'تم الموافقة' :
-                       'تم الرفض'}
-                    </span>
-                    {group.status === 'pending' && (
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleGroupStatusChange(groupId, 'approved')}
-                          className="text-green-600 hover:text-green-900 ml-2"
-                        >
-                          <Check className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => handleGroupStatusChange(groupId, 'rejected')}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
+        {/* الطلبيات */}
+        <div className="mb-12">
+          <h3 className="text-xl font-semibold text-gray-800 mb-4">طلبيات الصيدليات</h3>
+          {Object.keys(groupedOrders).length > 0 ? (
+            <div className="space-y-4">
+              {Object.entries(groupedOrders).map(([groupId, group]) => (
+                <div key={groupId} className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
+                  <div 
+                    className="bg-gray-50 px-6 py-4 flex justify-between items-center cursor-pointer hover:bg-gray-100"
+                    onClick={() => toggleGroupExpansion(groupId)}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="p-1 bg-white rounded-full shadow">
+                        {expandedGroups.has(groupId) ? 
+                          <ChevronUp className="w-5 h-5 text-gray-600" /> : 
+                          <ChevronDown className="w-5 h-5 text-gray-600" />}
                       </div>
-                    )}
+                      <div>
+                        <h4 className="text-lg font-medium text-gray-800">{group.pharmacy}</h4>
+                        <div className="flex items-center gap-3 text-sm text-gray-600 mt-1">
+                          <span className="flex items-center gap-1">
+                            <Package className="w-4 h-4" />
+                            {group.products.length} صنف
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <DollarSign className="w-4 h-4" />
+                            {safeToLocaleString(group.totalAmount)} ريال
+                          </span>
+                          <span>{group.date}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`px-3 py-1 text-sm font-semibold rounded-full ${
+                        group.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                        group.status === 'approved' ? 'bg-green-100 text-green-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {group.status === 'pending' ? 'قيد الانتظار' : 
+                         group.status === 'approved' ? 'تم الموافقة' : 'تم الرفض'}
+                      </span>
+                      {group.status === 'pending' && (
+                        <div className="flex gap-1">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleGroupStatusChange(groupId, 'approved'); }} 
+                            className="p-1 text-green-600 hover:bg-green-50 rounded-full"
+                            title="موافقة على المجموعة"
+                          >
+                            <Check className="w-5 h-5" />
+                          </button>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleGroupStatusChange(groupId, 'rejected'); }} 
+                            className="p-1 text-red-600 hover:bg-red-50 rounded-full"
+                            title="رفض المجموعة"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
+                  
+                  {expandedGroups.has(groupId) && (
+                    <div className="p-4 border-t border-gray-200">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-6 py-3 text-right font-medium text-gray-500">الدواء</th>
+                              <th className="px-6 py-3 text-right font-medium text-gray-500">السعر</th>
+                              <th className="px-6 py-3 text-right font-medium text-gray-500">الكمية</th>
+                              <th className="px-6 py-3 text-right font-medium text-gray-500">المجموع</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {group.products.map((product, i) => (
+                              <tr key={i}>
+                                <td className="px-6 py-4 text-right font-medium text-gray-900">
+                                  {product.medicine}
+                                </td>
+                                <td className="px-6 py-4 text-right text-gray-500">
+                                  {safeToLocaleString(product.price)} ريال
+                                </td>
+                                <td className="px-6 py-4 text-right text-gray-500">
+                                  {product.quantity}
+                                </td>
+                                <td className="px-6 py-4 text-right font-medium text-gray-900">
+                                  {safeToLocaleString(product.totalPrice)} ريال
+                                </td>
+                              </tr>
+                            ))}
+                            <tr className="bg-gray-50">
+                              <td colSpan={3} className="px-6 py-4 text-right font-bold text-gray-900">
+                                الإجمالي:
+                              </td>
+                              <td className="px-6 py-4 text-right font-bold text-gray-900">
+                                {safeToLocaleString(group.totalAmount)} ريال
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المنتج</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الكمية</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {group.orders.map((order) => (
-                      <tr key={order.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{order.medicine}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{order.quantity}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : <p className="text-center text-gray-500">لا توجد طلبيات حالياً</p>}
         </div>
       </div>
 
-      {/* Hidden Receipt for Printing */}
       <div className="hidden">
         <div ref={receiptRef}>
           {selectedCollection && (
@@ -232,6 +334,7 @@ const FinancialCollector: React.FC = () => {
               pharmacyName={selectedCollection.pharmacy}
               date={selectedCollection.date}
               amount={selectedCollection.amount || 0}
+              products={selectedCollection.products || []}
               representativeName="محمد أحمد"
               receiverName="أحمد محمد"
             />
