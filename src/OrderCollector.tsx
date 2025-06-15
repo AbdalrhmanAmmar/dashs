@@ -250,15 +250,45 @@ export default function OrderCollector() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {order.isEditing ? (
-                              <input
-                                type="number"
-                                min="1"
-                                value={order.quantity}
-                                onChange={(e) => handleQuantityChange(order.id, parseInt(e.target.value) || 1)}
-                                className="w-20 p-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                              />
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={order.quantity}
+                                  onChange={(e) => handleQuantityChange(order.id, parseInt(e.target.value) || 1)}
+                                  className="w-20 p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  autoFocus
+                                />
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={() => handleSaveEdit(order.id)}
+                                    className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
+                                    title="حفظ"
+                                  >
+                                    <Save className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleCancelEdit(order.id)}
+                                    className="p-1 text-gray-600 hover:bg-gray-50 rounded transition-colors"
+                                    title="إلغاء"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
                             ) : (
-                              order.quantity
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{order.quantity}</span>
+                                {order.status === 'pending' && (
+                                  <button
+                                    onClick={() => handleEdit(order.id)}
+                                    className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                    title="تعديل الكمية"
+                                  >
+                                    <Edit className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
@@ -276,50 +306,22 @@ export default function OrderCollector() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <div className="flex space-x-2">
-                              {order.isEditing ? (
+                              {!order.isEditing && order.status === 'pending' && (
                                 <>
                                   <button
-                                    onClick={() => handleSaveEdit(order.id)}
+                                    onClick={() => handleStatusChange(order.id, 'approved')}
                                     className="text-green-600 hover:text-green-900 ml-2 p-1 hover:bg-green-50 rounded transition-colors"
-                                    title="حفظ التعديل"
+                                    title="تأكيد التوريد"
                                   >
-                                    <Save className="w-4 h-4" />
+                                    <Check className="w-4 h-4" />
                                   </button>
                                   <button
-                                    onClick={() => handleCancelEdit(order.id)}
-                                    className="text-gray-600 hover:text-gray-900 p-1 hover:bg-gray-50 rounded transition-colors"
-                                    title="إلغاء التعديل"
+                                    onClick={() => handleStatusChange(order.id, 'rejected')}
+                                    className="text-red-600 hover:text-red-900 p-1 hover:bg-red-50 rounded transition-colors"
+                                    title="رفض الصنف"
                                   >
                                     <X className="w-4 h-4" />
                                   </button>
-                                </>
-                              ) : (
-                                <>
-                                  {order.status === 'pending' && (
-                                    <>
-                                      <button
-                                        onClick={() => handleEdit(order.id)}
-                                        className="text-blue-600 hover:text-blue-900 ml-2 p-1 hover:bg-blue-50 rounded transition-colors"
-                                        title="تعديل الكمية"
-                                      >
-                                        <Edit className="w-4 h-4" />
-                                      </button>
-                                      <button
-                                        onClick={() => handleStatusChange(order.id, 'approved')}
-                                        className="text-green-600 hover:text-green-900 ml-2 p-1 hover:bg-green-50 rounded transition-colors"
-                                        title="تأكيد التوريد"
-                                      >
-                                        <Check className="w-4 h-4" />
-                                      </button>
-                                      <button
-                                        onClick={() => handleStatusChange(order.id, 'rejected')}
-                                        className="text-red-600 hover:text-red-900 p-1 hover:bg-red-50 rounded transition-colors"
-                                        title="رفض الصنف"
-                                      >
-                                        <X className="w-4 h-4" />
-                                      </button>
-                                    </>
-                                  )}
                                 </>
                               )}
                             </div>
