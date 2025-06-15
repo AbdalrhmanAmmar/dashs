@@ -150,6 +150,9 @@ export default function PharmacyVisitForm() {
     const collections = JSON.parse(localStorage.getItem('collections') || '[]');
     const orders = JSON.parse(localStorage.getItem('orders') || '[]');
     
+    // Generate unique group ID for this pharmacy visit
+    const groupId = `${formData.pharmacyName}-${formData.visitDate}-${Date.now()}`;
+    
     if (formData.collection === 'نعم') {
       const selectedProducts = formData.collectionProducts
         .filter(p => p.selected && p.quantity > 0)
@@ -168,28 +171,29 @@ export default function PharmacyVisitForm() {
         receiptNumber: formData.receiptNumber,
         products: selectedProducts,
         type: 'collection',
-        status: 'pending'
+        status: 'pending',
+        groupId: groupId
       });
     }
 
     if (formData.order === 'نعم') {
       const selectedOrderProducts = formData.orderProducts
-        .filter(p => p.selected && p.quantity > 0)
-        .map(p => ({
-          medicine: p.medicine,
-          quantity: p.quantity,
-          price: p.price,
-          totalPrice: p.price * p.quantity
-        }));
+        .filter(p => p.selected && p.quantity > 0);
 
-      orders.push({
-        id: Date.now(),
-        date: formData.visitDate,
-        pharmacy: formData.pharmacyName,
-        type: 'order',
-        status: 'pending',
-        groupId: `${formData.pharmacyName}-${formData.visitDate}`,
-        products: selectedOrderProducts
+      // Create individual order entries for each product
+      selectedOrderProducts.forEach(product => {
+        orders.push({
+          id: Date.now() + Math.random(), // Ensure unique IDs
+          date: formData.visitDate,
+          pharmacy: formData.pharmacyName,
+          medicine: product.medicine,
+          quantity: product.quantity,
+          price: product.price,
+          totalPrice: product.price * product.quantity,
+          type: 'order',
+          status: 'pending',
+          groupId: groupId
+        });
       });
     }
 
@@ -202,6 +206,7 @@ export default function PharmacyVisitForm() {
       setTimeout(() => handlePrint(), 100);
     }
 
+    // Reset form
     setFormData({
       visitDate: '',
       pharmacyName: '',
