@@ -1,6 +1,6 @@
 import React from 'react';
 import { HashRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import { Package, LayoutDashboard, FileBarChart2, Megaphone, FlaskRound as Flask, ClipboardCheck, Store, DollarSign, ShoppingCart, FileSpreadsheet, BarChart2 } from 'lucide-react';
+import { Package, LayoutDashboard, FileBarChart2, Megaphone, FlaskRound as Flask, ClipboardCheck, Store, DollarSign, ShoppingCart, FileSpreadsheet, BarChart2, Calendar } from 'lucide-react';
 import Dashboard from './Dashboard';
 import Reports from './Reports';
 import VisitForm from './VisitForm';
@@ -12,6 +12,7 @@ import FinancialCollector from './FinancialCollector';
 import OrderCollector from './OrderCollector';
 import PharmacyReports from './PharmacyReports';
 import PharmacyDashboard from './PharmacyDashboard';
+import WorkCalendar from './components/WorkCalendar';
 
 function App() {
   return (
@@ -56,6 +57,13 @@ function App() {
                 <span>تقييم المندوب</span>
               </Link>
               <Link
+                to="/calendar"
+                className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition duration-200"
+              >
+                <Calendar className="w-5 h-5" />
+                <span>تقويم العمل</span>
+              </Link>
+              <Link
                 to="/dashboard"
                 className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition duration-200"
               >
@@ -68,13 +76,6 @@ function App() {
               >
                 <FileBarChart2 className="w-5 h-5" />
                 <span>التقارير</span>
-              </Link>
-              <Link
-                to="/pharmacy-dashboard"
-                className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition duration-200"
-              >
-                <BarChart2 className="w-5 h-5" />
-                <span>لوحة تحكم. الصيدليات</span>
               </Link>
               <Link
                 to="/pharmacy-dashboard"
@@ -114,6 +115,7 @@ function App() {
           <Route path="/samples" element={<SamplesForm />} />
           <Route path="/marketing" element={<MarketingActivity />} />
           <Route path="/evaluation" element={<EvaluationForm />} />
+          <Route path="/calendar" element={<WorkCalendar />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/pharmacy-dashboard" element={<PharmacyDashboard />} />
