@@ -1,6 +1,6 @@
 import React from 'react';
 import { HashRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import { Package, LayoutDashboard, FileBarChart2, Megaphone, FlaskRound as Flask, ClipboardCheck, Store, DollarSign, ShoppingCart, FileSpreadsheet, BarChart2, Calendar } from 'lucide-react';
+import { Package, LayoutDashboard, FileBarChart2, Megaphone, FlaskRound as Flask, ClipboardCheck, Store, DollarSign, ShoppingCart, FileSpreadsheet, BarChart2, Calendar, AlertTriangle } from 'lucide-react';
 import Dashboard from './Dashboard';
 import Reports from './Reports';
 import VisitForm from './VisitForm';
@@ -12,7 +12,9 @@ import FinancialCollector from './FinancialCollector';
 import OrderCollector from './OrderCollector';
 import PharmacyReports from './PharmacyReports';
 import PharmacyDashboard from './PharmacyDashboard';
+import MissingItems from './MissingItems';
 import WorkCalendar from './components/WorkCalendar';
+
 
 function App() {
   return (
@@ -105,6 +107,13 @@ function App() {
                 <ShoppingCart className="w-5 h-5" />
                 <span>محصل الطلبيات</span>
               </Link>
+              <Link
+                to="/missing-items"
+                className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition duration-200"
+              >
+                <AlertTriangle className="w-5 h-5" />
+                <span>الطلبيات المفقودة</span>
+              </Link>
             </div>
           </div>
         </nav>
@@ -115,13 +124,14 @@ function App() {
           <Route path="/samples" element={<SamplesForm />} />
           <Route path="/marketing" element={<MarketingActivity />} />
           <Route path="/evaluation" element={<EvaluationForm />} />
-          <Route path="/calendar" element={<WorkCalendar />} />
+          <Route path="/calendar" element={<WorkCalendar  />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/pharmacy-dashboard" element={<PharmacyDashboard />} />
           <Route path="/pharmacy-reports" element={<PharmacyReports />} />
           <Route path="/financial-collector" element={<FinancialCollector />} />
           <Route path="/order-collector" element={<OrderCollector />} />
+          <Route path="/missing-items" element={<MissingItems />} />
         </Routes>
       </div>
     </Router>

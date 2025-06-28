@@ -578,9 +578,22 @@ export default function PharmacyVisitForm() {
                   بيانات التحصيل
                 </h3>
 
-                <div className="flex justify-end items-center gap-4 text-lg font-semibold">
-                  <DollarSign className="w-6 h-6" />
-                  <span>المجموع الكلي: {formData.amount} ريال</span>
+                <div className="relative">
+                  <label className="flex items-center text-gray-700 mb-2">
+                    <DollarSign className="w-5 h-5 ml-2" />
+                    المبلغ المحصل
+                  </label>
+                  <input
+                    type="number"
+                    name="amount"
+                    value={formData.amount}
+                    onChange={handleChange}
+                    min="0"
+                    step="0.01"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="أدخل المبلغ المحصل بالريال"
+                    required
+                  />
                 </div>
 
                 <div className="space-y-4">
@@ -650,11 +663,15 @@ export default function PharmacyVisitForm() {
                   <span className="font-medium">التاريخ:</span>
                   <span>{formData.visitDate}</span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">رقم الوصل:</span>
+                  <span>{formData.receiptNumber}</span>
+                </div>
 
                 <div className="border-t border-gray-200 my-4"></div>
 
                 <div className="flex justify-between font-bold text-lg">
-                  <span>المجموع الكلي:</span>
+                  <span>المبلغ المحصل:</span>
                   <span>{formData.amount} ريال</span>
                 </div>
 

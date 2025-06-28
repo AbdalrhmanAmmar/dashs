@@ -11,6 +11,8 @@ import {
   Save,
   Eye,
   FileText,
+  AlertTriangle,
+  Minus,
 } from "lucide-react";
 import { useReactToPrint } from "react-to-print";
 
@@ -19,6 +21,16 @@ interface Product {
   quantity: number;
   price: number;
   totalPrice: number;
+}
+
+interface MissingItem {
+  id: string;
+  date: string;
+  pharmacy: string;
+  medicine: string;
+  quantityMissing: number;
+  originalQuantity: number;
+  groupId: string;
 }
 
 interface Order {
@@ -41,12 +53,14 @@ interface GroupedOrder {
 
 const OrderCollector: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [missingItems, setMissingItems] = useState<MissingItem[]>([]);
   const [selectedCollection, setSelectedCollection] =
     useState<GroupedOrder | null>(null);
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<GroupedOrder | null>(null);
   const [editingProducts, setEditingProducts] = useState<Product[]>([]);
+  const [missingQuantities, setMissingQuantities] = useState<Record<string, number>>({});
   const printRef = useRef<HTMLDivElement>(null);
 
   const handlePrint = useReactToPrint({
@@ -55,7 +69,9 @@ const OrderCollector: React.FC = () => {
 
   useEffect(() => {
     const savedOrders = JSON.parse(localStorage.getItem("orders") || "[]");
+    const savedMissingItems = JSON.parse(localStorage.getItem("missingItems") || "[]");
     setOrders(savedOrders);
+    setMissingItems(savedMissingItems);
   }, []);
 
   const handleStatusChange = (
@@ -86,7 +102,7 @@ const OrderCollector: React.FC = () => {
   };
 
   const handleViewGroup = (group: GroupedOrder) => {
-    console.log("Viewing group:", group); // للتحقق من البيانات
+    console.log("Viewing group:", group);
     setSelectedCollection(group);
     setViewModalOpen(true);
   };
@@ -94,18 +110,61 @@ const OrderCollector: React.FC = () => {
   const handleEditGroup = (group: GroupedOrder) => {
     setEditingGroup(group);
     setEditingProducts([...group.products]);
+    setMissingQuantities({});
     setEditModalOpen(true);
+  };
+
+  const handleMissingQuantityChange = (productIndex: number, missingQty: number) => {
+    const productKey = `${editingGroup?.groupId}-${productIndex}`;
+    setMissingQuantities(prev => ({
+      ...prev,
+      [productKey]: missingQty
+    }));
   };
 
   const handleSaveEdit = () => {
     if (!editingGroup) return;
 
+    const newMissingItems: MissingItem[] = [];
+    const updatedProducts = editingProducts.map((product, index) => {
+      const productKey = `${editingGroup.groupId}-${index}`;
+      const missingQty = missingQuantities[productKey] || 0;
+      
+      if (missingQty > 0 && missingQty <= product.quantity) {
+        // إضافة العنصر المفقود
+        newMissingItems.push({
+          id: `missing-${Date.now()}-${index}`,
+          date: editingGroup.date,
+          pharmacy: editingGroup.pharmacy,
+          medicine: product.medicine,
+          quantityMissing: missingQty,
+          originalQuantity: product.quantity,
+          groupId: editingGroup.groupId
+        });
+
+        // تقليل الكمية من المنتج الأصلي
+        return {
+          ...product,
+          quantity: product.quantity - missingQty,
+          totalPrice: product.price * (product.quantity - missingQty)
+        };
+      }
+      return product;
+    });
+
+    // حفظ العناصر المفقودة
+    if (newMissingItems.length > 0) {
+      const allMissingItems = [...missingItems, ...newMissingItems];
+      setMissingItems(allMissingItems);
+      localStorage.setItem("missingItems", JSON.stringify(allMissingItems));
+    }
+
+    // تحديث الطلبيات
     const updatedOrders = orders.map((order) => {
       if (order.groupId === editingGroup.groupId) {
         return {
           ...order,
-          products: editingProducts,
-          // Recalculate total amount for the order if necessary
+          products: updatedProducts,
         };
       }
       return order;
@@ -114,6 +173,7 @@ const OrderCollector: React.FC = () => {
     setOrders(updatedOrders);
     localStorage.setItem("orders", JSON.stringify(updatedOrders));
     setEditModalOpen(false);
+    setMissingQuantities({});
   };
 
   const handleProductQuantityChange = (index: number, newQuantity: number) => {
@@ -165,7 +225,19 @@ const OrderCollector: React.FC = () => {
   return (
     <div className="py-12 px-4 sm:px-6 lg:px-8" dir="rtl">
       <div className="max-w-7xl mx-auto">
-        <h2 className="text-2xl font-bold text-gray-900 mb-8">محصل الطلبيات</h2>
+        <div className="flex justify-between items-center mb-8">
+          <h2 className="text-2xl font-bold text-gray-900">محصل الطلبيات</h2>
+          <div className="flex gap-4">
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-orange-600" />
+                <span className="text-orange-800 font-medium">
+                  العناصر المفقودة: {missingItems.length}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {Object.keys(groupedOrders).length === 0 ? (
           <div className="bg-white rounded-lg shadow p-8 text-center">
@@ -353,7 +425,7 @@ const OrderCollector: React.FC = () => {
                           <button
                             onClick={() => handleEditGroup(group)}
                             className="p-2 text-green-600 hover:bg-green-50 rounded-full"
-                            title="تعديل"
+                            title="تعديل وإدارة المفقود"
                           >
                             <Edit className="w-5 h-5" />
                           </button>
@@ -468,14 +540,14 @@ const OrderCollector: React.FC = () => {
         </div>
       )}
 
-      {/* Edit Modal */}
+      {/* Edit Modal with Missing Items */}
       {editModalOpen && editingGroup && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-bold text-gray-900">
-                  تعديل الطلبية
+                  تعديل الطلبية وإدارة المفقود
                 </h3>
                 <button
                   onClick={() => setEditModalOpen(false)}
@@ -496,51 +568,88 @@ const OrderCollector: React.FC = () => {
                 </div>
               </div>
 
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle className="w-5 h-5 text-orange-600" />
+                  <h4 className="font-semibold text-orange-800">إدارة الطلبات المفقودة</h4>
+                </div>
+                <p className="text-orange-700 text-sm">
+                  يمكنك تحديد الكمية المفقودة لكل منتج. سيتم تسجيل العناصر المفقودة في صفحة منفصلة وتقليل الكمية من الطلبية الأصلية.
+                </p>
+              </div>
+
               <div className="overflow-x-auto mb-6">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-right">الدواء</th>
                       <th className="px-6 py-3 text-right">السعر</th>
-                      <th className="px-6 py-3 text-right">الكمية</th>
+                      <th className="px-6 py-3 text-right">الكمية الأصلية</th>
+                      <th className="px-6 py-3 text-right">الكمية المفقودة</th>
+                      <th className="px-6 py-3 text-right">الكمية النهائية</th>
                       <th className="px-6 py-3 text-right">المجموع</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {editingProducts.map((product, index) => (
-                      <tr key={index}>
-                        <td className="px-6 py-4">{product.medicine}</td>
-                        <td className="px-6 py-4">
-                          {safeToLocaleString(product.price)} ريال
-                        </td>
-                        <td className="px-6 py-4">
-                          <input
-                            type="number"
-                            min="1"
-                            value={product.quantity}
-                            onChange={(e) =>
-                              handleProductQuantityChange(
-                                index,
-                                parseInt(e.target.value) || 1
-                              )
-                            }
-                            className="w-20 p-2 border border-gray-300 rounded-md"
-                          />
-                        </td>
-                        <td className="px-6 py-4">
-                          {safeToLocaleString(product.totalPrice)} ريال
-                        </td>
-                      </tr>
-                    ))}
+                    {editingProducts.map((product, index) => {
+                      const productKey = `${editingGroup.groupId}-${index}`;
+                      const missingQty = missingQuantities[productKey] || 0;
+                      const finalQuantity = product.quantity - missingQty;
+                      const finalTotal = product.price * finalQuantity;
+                      
+                      return (
+                        <tr key={index}>
+                          <td className="px-6 py-4">{product.medicine}</td>
+                          <td className="px-6 py-4">
+                            {safeToLocaleString(product.price)} ريال
+                          </td>
+                          <td className="px-6 py-4 font-medium">
+                            {product.quantity}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <Minus className="w-4 h-4 text-red-500" />
+                              <input
+                                type="number"
+                                min="0"
+                                max={product.quantity}
+                                value={missingQty}
+                                onChange={(e) =>
+                                  handleMissingQuantityChange(
+                                    index,
+                                    parseInt(e.target.value) || 0
+                                  )
+                                }
+                                className="w-20 p-2 border border-red-300 rounded-md focus:ring-2 focus:ring-red-500"
+                                placeholder="0"
+                              />
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`font-medium ${finalQuantity < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              {finalQuantity}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            {safeToLocaleString(finalTotal)} ريال
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
               <div className="flex justify-between items-center mt-6">
                 <div className="text-lg font-bold">
-                  الإجمالي:{" "}
+                  الإجمالي الجديد:{" "}
                   {safeToLocaleString(
-                    editingProducts.reduce((sum, p) => sum + p.totalPrice, 0)
+                    editingProducts.reduce((sum, p, index) => {
+                      const productKey = `${editingGroup.groupId}-${index}`;
+                      const missingQty = missingQuantities[productKey] || 0;
+                      const finalQuantity = p.quantity - missingQty;
+                      return sum + (p.price * finalQuantity);
+                    }, 0)
                   )}{" "}
                   ريال
                 </div>
@@ -556,7 +665,7 @@ const OrderCollector: React.FC = () => {
                     className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
                   >
                     <Save className="w-5 h-5" />
-                    حفظ التعديلات
+                    حفظ التعديلات والمفقود
                   </button>
                 </div>
               </div>
