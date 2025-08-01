@@ -22,7 +22,7 @@ function App() {
       <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
         <nav className="bg-white shadow-lg p-4">
           <div className="max-w-7xl mx-auto flex justify-between items-center">
-            <div className="flex space-x-4">
+            {/* <div className="flex space-x-4">
               <Link
                 to="/"
                 className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition duration-200"
@@ -114,7 +114,7 @@ function App() {
                 <AlertTriangle className="w-5 h-5" />
                 <span>الطلبيات المفقودة</span>
               </Link>
-            </div>
+            </div> */}
           </div>
         </nav>
 
